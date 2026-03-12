@@ -1,0 +1,19 @@
+# OpenAI — LLM (GPT-4o) and embeddings (text-embedding-3-small)
+openai
+
+# LangChain — RAG pipeline orchestration
+langchain
+langchain-openai
+langchain-community
+
+# MongoDB — vector store client
+pymongo
+
+# AWS S3 — article storage
+boto3
+
+# Streamlit — dashboard UI
+streamlit
+
+# Environment variable management — loads .env into os.environ
+python-dotenv
