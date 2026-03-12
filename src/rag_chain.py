@@ -45,11 +45,16 @@ def retrieve_chunks(query, k=4):
 
 
 def answer_question(query):
-    """Retrieve relevant chunks then ask GPT-4o to answer using them."""
+    """Retrieve relevant chunks then ask GPT-4o to answer using them.
+    Returns a dict with 'answer' and 'sources'.
+    """
     chunks = retrieve_chunks(query)
 
     if not chunks:
-        return "I couldn't find any relevant information to answer that question."
+        return {
+            "answer": "I couldn't find any relevant information to answer that question.",
+            "sources": [],
+        }
 
     # Build context string from retrieved chunks
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
@@ -70,11 +75,18 @@ Answer:"""
         temperature=0,
     )
 
-    return response.choices[0].message.content
+    # Deduplicate sources
+    sources = list(dict.fromkeys(c["source"] for c in chunks))
+
+    return {
+        "answer": response.choices[0].message.content,
+        "sources": sources,
+    }
 
 
 if __name__ == "__main__":
-    # Quick test
     q = "How has the cost of solar panels changed over time?"
+    result = answer_question(q)
     print(f"Q: {q}\n")
-    print(f"A: {answer_question(q)}")
+    print(f"A: {result['answer']}")
+    print(f"\nSources: {result['sources']}")
