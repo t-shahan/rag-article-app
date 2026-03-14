@@ -12,15 +12,42 @@ load_dotenv()
 mongo_client = MongoClient(os.getenv("MONGODB_URI"))
 collection = mongo_client[os.getenv("MONGODB_DB")]["articles"]
 
+
+def get_article_title(source):
+    """Return the human-readable title for a source key by reading the first chunk from MongoDB."""
+    doc = collection.find_one({"source": source}, {"text": 1, "_id": 0}, sort=[("chunk_index", 1)])
+    if doc and doc["text"].startswith("Title:"):
+        return doc["text"].split("\n")[0].replace("Title:", "").strip()
+    return source.split("/")[-1].replace(".txt", "").replace("_", " ").title()
+
+
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
 
-# --- Sidebar navigation ---
+# --- Sidebar ---
 with st.sidebar:
     st.title("RAG Article App")
     st.markdown("---")
     page = st.radio("Navigate", ["Chat", "Data Overview"], label_visibility="collapsed")
-    st.markdown("---")
-    st.caption("Powered by OpenAI · MongoDB Atlas · AWS S3")
+
+    if page == "Chat":
+        st.markdown("")
+        if st.button("Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            st.session_state.pop("copy_open", None)
+            st.rerun()
+
+    st.markdown("""
+        <style>
+        .sidebar-footer {
+            position: fixed;
+            bottom: 2rem;
+            font-size: 0.75rem;
+            color: rgba(49, 51, 63, 0.4);
+        }
+        </style>
+        <div class="sidebar-footer">Powered by OpenAI · MongoDB Atlas · AWS S3</div>
+    """, unsafe_allow_html=True)
+
 
 # --- Page: Chat ---
 if page == "Chat":
@@ -37,16 +64,29 @@ if page == "Chat":
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "copy_open" not in st.session_state:
+        st.session_state.copy_open = set()
 
     # Display chat history
-    for msg in st.session_state.messages:
+    for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-            if msg["role"] == "assistant" and msg.get("sources"):
-                with st.expander("Sources", expanded=False):
-                    for src in msg["sources"]:
-                        name = src.split("/")[-1].replace(".txt", "").replace("_", " ").title()
-                        st.caption(f"• {name} (`{src}`)")
+            if msg["role"] == "assistant":
+                if msg.get("sources"):
+                    with st.expander("Sources", expanded=False):
+                        for src in msg["sources"]:
+                            title = get_article_title(src)
+                            st.caption(f"• {title}")
+
+                if st.button("📋 Copy", key=f"copy_btn_{i}"):
+                    if i in st.session_state.copy_open:
+                        st.session_state.copy_open.discard(i)
+                    else:
+                        st.session_state.copy_open.add(i)
+                    st.rerun()
+
+                if i in st.session_state.copy_open:
+                    st.text_area("Response text", value=msg["content"], height=150, key=f"copy_area_{i}")
 
     # Chat input
     if query := st.chat_input("Ask anything about the articles..."):
@@ -61,14 +101,15 @@ if page == "Chat":
             if result["sources"]:
                 with st.expander("Sources", expanded=False):
                     for src in result["sources"]:
-                        name = src.split("/")[-1].replace(".txt", "").replace("_", " ").title()
-                        st.caption(f"• {name} (`{src}`)")
+                        title = get_article_title(src)
+                        st.caption(f"• {title}")
 
         st.session_state.messages.append({
             "role": "assistant",
             "content": result["answer"],
             "sources": result["sources"],
         })
+
 
 # --- Page: Data Overview ---
 elif page == "Data Overview":
@@ -91,7 +132,6 @@ elif page == "Data Overview":
         chunks = list(collection.find({"source": source}, {"text": 1, "_id": 0}).sort("chunk_index", 1))
         chunk_count = len(chunks)
 
-        # Parse title from the first chunk ("Title: ...")
         first_text = chunks[0]["text"] if chunks else ""
         if first_text.startswith("Title:"):
             title = first_text.split("\n")[0].replace("Title:", "").strip()
@@ -103,7 +143,7 @@ elif page == "Data Overview":
         with st.expander(f"**{title}** — {chunk_count} chunks"):
             st.caption(f"S3 key: `{source}`")
             st.markdown(f"*{preview}*")
-            st.markdown(f"**Chunks:**")
+            st.markdown("**Chunks:**")
             for i, chunk in enumerate(chunks):
                 st.markdown(
                     f"<div style='background:#f8f9fa; border-left: 3px solid #dee2e6; "
