@@ -23,6 +23,23 @@ def get_article_title(source):
 
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
 
+# --- Password gate ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("<h2 style='text-align: center; margin-top: 4rem;'>RAG Article App</h2>", unsafe_allow_html=True)
+    col = st.columns([1, 2, 1])[1]
+    with col:
+        password = st.text_input("Password", type="password")
+        if st.button("Enter", use_container_width=True):
+            if password == os.getenv("APP_PASSWORD"):
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
+    st.stop()
+
 # --- Sidebar ---
 with st.sidebar:
     st.title("RAG Article App")
