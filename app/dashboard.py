@@ -216,6 +216,11 @@ if page == "Chat":
         # Persist the updated conversation to MongoDB
         save_conversation(session_id, st.session_state.messages)
 
+        # Rerun so the history loop re-renders the new assistant message,
+        # which is where follow-up buttons are rendered. Without this, the
+        # follow-ups only appear after the next manual interaction/refresh.
+        st.rerun()
+
 
 # --- Page: Data Overview ---
 elif page == "Data Overview":
