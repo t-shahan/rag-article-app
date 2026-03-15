@@ -12,10 +12,16 @@ from src.rag_chain import answer_question
 
 load_dotenv()
 
-mongo_client = MongoClient(os.getenv("MONGODB_URI"))
-db = mongo_client[os.getenv("MONGODB_DB")]
-collection = db["articles"]
-conversations = db["conversations"]
+
+@st.cache_resource
+def get_mongo_collections():
+    """Cache the MongoDB client so all Streamlit sessions share one connection pool."""
+    client = MongoClient(os.getenv("MONGODB_URI"))
+    db = client[os.getenv("MONGODB_DB")]
+    return db["articles"], db["conversations"]
+
+
+collection, conversations = get_mongo_collections()
 
 
 def get_article_title(source):

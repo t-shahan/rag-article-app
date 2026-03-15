@@ -47,20 +47,23 @@ def retrieve_chunks(query, k=4):
 
 def generate_follow_ups(query, answer):
     """Generate 3 follow-up questions based on the Q&A exchange."""
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Based on this Q&A, suggest 3 short follow-up questions a curious reader might ask.\n\n"
-                f"Q: {query}\nA: {answer}\n\n"
-                f"Return exactly 3 questions, one per line, no numbering, no bullets, no extra text."
-            ),
-        }],
-        temperature=0.7,
-    )
-    lines = response.choices[0].message.content.strip().split("\n")
-    return [l.strip() for l in lines if l.strip()][:3]
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Based on this Q&A, suggest 3 short follow-up questions a curious reader might ask.\n\n"
+                    f"Q: {query}\nA: {answer}\n\n"
+                    f"Return exactly 3 questions, one per line, no numbering, no bullets, no extra text."
+                ),
+            }],
+            temperature=0.7,
+        )
+        lines = response.choices[0].message.content.strip().split("\n")
+        return [l.strip() for l in lines if l.strip()][:3]
+    except Exception:
+        return []
 
 
 def condense_question(query, chat_history):
@@ -80,22 +83,25 @@ def condense_question(query, chat_history):
         for msg in chat_history[-6:]
     )
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Given this conversation:\n{history_text}\n\n"
-                f"Rewrite the follow-up question as a fully standalone question "
-                f"that includes all necessary context from the conversation. "
-                f"Return only the rewritten question, nothing else.\n\n"
-                f"Follow-up: {query}"
-            ),
-        }],
-        temperature=0,
-    )
-
-    return response.choices[0].message.content.strip()
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Given this conversation:\n{history_text}\n\n"
+                    f"Rewrite the follow-up question as a fully standalone question "
+                    f"that includes all necessary context from the conversation. "
+                    f"Return only the rewritten question, nothing else.\n\n"
+                    f"Follow-up: {query}"
+                ),
+            }],
+            temperature=0,
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        # If condensation fails, fall back to the original query
+        return query
 
 
 def answer_question(query, chat_history=None):
@@ -104,7 +110,7 @@ def answer_question(query, chat_history=None):
     chat_history is a list of {"role": "user"/"assistant", "content": "..."} dicts
     representing prior turns in the conversation.
 
-    Returns a dict with 'answer' and 'sources'.
+    Returns a dict with 'answer', 'sources', 'confidence', and 'follow_ups'.
     """
     if chat_history is None:
         chat_history = []
@@ -117,6 +123,8 @@ def answer_question(query, chat_history=None):
         return {
             "answer": "I couldn't find any relevant information to answer that question.",
             "sources": [],
+            "confidence": None,
+            "follow_ups": [],
         }
 
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
@@ -136,14 +144,22 @@ def answer_question(query, chat_history=None):
         "content": f"Context:\n{context}\n\nQuestion: {query}",
     })
 
-    response = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=messages,
-        temperature=0,
-    )
+    try:
+        response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0,
+        )
+        answer = response.choices[0].message.content
+    except Exception as e:
+        return {
+            "answer": f"Sorry, I encountered an error generating a response: {e}",
+            "sources": [],
+            "confidence": None,
+            "follow_ups": [],
+        }
 
     sources = list(dict.fromkeys(c["source"] for c in chunks))
-    answer = response.choices[0].message.content
 
     # Confidence: average vector search score across retrieved chunks, as a percentage
     scores = [c.get("score", 0) for c in chunks]
