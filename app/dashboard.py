@@ -44,6 +44,14 @@ def save_conversation(session_id, messages):
 
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
 
+# Disable scroll anchoring globally so the browser doesn't jump when
+# new elements (like expanders) are added to the DOM during rendering.
+st.markdown("""
+    <style>
+    section[data-testid="stMain"] { overflow-anchor: none; }
+    </style>
+""", unsafe_allow_html=True)
+
 # --- Password gate ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -52,8 +60,10 @@ if not st.session_state.authenticated:
     st.markdown("<h2 style='text-align: center; margin-top: 4rem;'>RAG Article App</h2>", unsafe_allow_html=True)
     col = st.columns([1, 2, 1])[1]
     with col:
-        password = st.text_input("Password", type="password")
-        if st.button("Enter", use_container_width=True):
+        with st.form("password_form"):
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Enter", use_container_width=True)
+        if submitted:
             if password == os.getenv("APP_PASSWORD"):
                 st.session_state.authenticated = True
                 st.rerun()
@@ -210,7 +220,15 @@ if page == "Chat":
 
 # --- Page: Data Overview ---
 elif page == "Data Overview":
-    components.html("<script>window.parent.scrollTo(0, 0);</script>", height=0)
+    components.html("""
+        <script>
+            // Delay gives Streamlit time to finish rendering before we scroll,
+            // otherwise the scroll fires mid-render and the page jumps again.
+            setTimeout(function() {
+                window.parent.scrollTo({ top: 0, behavior: 'instant' });
+            }, 80);
+        </script>
+    """, height=0)
     st.header("Data Overview")
 
     total_chunks = collection.count_documents({})
