@@ -208,21 +208,27 @@ if page == "Chat":
                         title = get_article_title(src)
                         st.caption(f"• {title}")
 
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": result["answer"],
-            "sources": result["sources"],
-            "confidence": result["confidence"],
-            "follow_ups": result["follow_ups"],
-        })
+            # Append assistant message now so the index matches what the
+            # history loop will use on future reruns, keeping button keys stable.
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["answer"],
+                "sources": result["sources"],
+                "confidence": result["confidence"],
+                "follow_ups": result["follow_ups"],
+            })
 
-        # Persist the updated conversation to MongoDB
+            # Render follow-ups inline so they appear immediately without
+            # needing a rerun (which was causing the frozen stop button).
+            if result.get("follow_ups"):
+                new_idx = len(st.session_state.messages) - 1
+                cols = st.columns(len(result["follow_ups"]))
+                for j, question in enumerate(result["follow_ups"]):
+                    if cols[j].button(question, key=f"followup_{new_idx}_{j}"):
+                        st.session_state.followup_query = question
+                        st.rerun()
+
         save_conversation(session_id, st.session_state.messages)
-
-        # Rerun so the history loop re-renders the new assistant message,
-        # which is where follow-up buttons are rendered. Without this, the
-        # follow-ups only appear after the next manual interaction/refresh.
-        st.rerun()
 
 
 # --- Page: Data Overview ---
