@@ -115,11 +115,35 @@ if page == "Chat":
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant":
+                # Confidence badge
+                confidence = msg.get("confidence")
+                if confidence is not None:
+                    if confidence >= 70:
+                        dot_color = "#28a745"
+                    elif confidence >= 40:
+                        dot_color = "#ffc107"
+                    else:
+                        dot_color = "#dc3545"
+                    st.markdown(
+                        f"<span style='font-size:0.8rem; color:{dot_color};'>● {confidence}% match</span>",
+                        unsafe_allow_html=True,
+                    )
+
                 if msg.get("sources"):
                     with st.expander("Sources", expanded=False):
                         for src in msg["sources"]:
                             title = get_article_title(src)
                             st.caption(f"• {title}")
+
+                # Follow-up suggestions (only on the last assistant message)
+                if i == len(st.session_state.messages) - 1 and msg.get("follow_ups"):
+                    st.markdown("<div style='margin-top:0.5rem;'>", unsafe_allow_html=True)
+                    cols = st.columns(len(msg["follow_ups"]))
+                    for j, question in enumerate(msg["follow_ups"]):
+                        if cols[j].button(question, key=f"followup_{i}_{j}"):
+                            st.session_state.followup_query = question
+                            st.rerun()
+                    st.markdown("</div>", unsafe_allow_html=True)
 
                 if st.button("📋 Copy", key=f"copy_btn_{i}"):
                     if i in st.session_state.copy_open:
@@ -131,8 +155,11 @@ if page == "Chat":
                 if i in st.session_state.copy_open:
                     st.text_area("Response text", value=msg["content"], height=150, key=f"copy_area_{i}")
 
+    # Handle follow-up button clicks — picked up on the rerun after a button is pressed
+    followup = st.session_state.pop("followup_query", None)
+
     # Chat input
-    if query := st.chat_input("Ask anything about the articles..."):
+    if query := (followup or st.chat_input("Ask anything about the articles...")):
         # Build history from everything so far (before this new message)
         chat_history = [
             {"role": m["role"], "content": m["content"]}
@@ -147,6 +174,15 @@ if page == "Chat":
             with st.spinner(""):
                 result = answer_question(query, chat_history=chat_history)
             st.markdown(result["answer"])
+
+            if result.get("confidence") is not None:
+                c = result["confidence"]
+                dot_color = "#28a745" if c >= 70 else "#ffc107" if c >= 40 else "#dc3545"
+                st.markdown(
+                    f"<span style='font-size:0.8rem; color:{dot_color};'>● {c}% match</span>",
+                    unsafe_allow_html=True,
+                )
+
             if result["sources"]:
                 with st.expander("Sources", expanded=False):
                     for src in result["sources"]:
@@ -157,6 +193,8 @@ if page == "Chat":
             "role": "assistant",
             "content": result["answer"],
             "sources": result["sources"],
+            "confidence": result["confidence"],
+            "follow_ups": result["follow_ups"],
         })
 
         # Persist the updated conversation to MongoDB

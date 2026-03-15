@@ -36,12 +36,31 @@ def retrieve_chunks(query, k=4):
             "$project": {
                 "text": 1,
                 "source": 1,
+                "score": {"$meta": "vectorSearchScore"},
                 "_id": 0,
             }
         }
     ])
 
     return list(results)
+
+
+def generate_follow_ups(query, answer):
+    """Generate 3 follow-up questions based on the Q&A exchange."""
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Based on this Q&A, suggest 3 short follow-up questions a curious reader might ask.\n\n"
+                f"Q: {query}\nA: {answer}\n\n"
+                f"Return exactly 3 questions, one per line, no numbering, no bullets, no extra text."
+            ),
+        }],
+        temperature=0.7,
+    )
+    lines = response.choices[0].message.content.strip().split("\n")
+    return [l.strip() for l in lines if l.strip()][:3]
 
 
 def condense_question(query, chat_history):
@@ -124,10 +143,19 @@ def answer_question(query, chat_history=None):
     )
 
     sources = list(dict.fromkeys(c["source"] for c in chunks))
+    answer = response.choices[0].message.content
+
+    # Confidence: average vector search score across retrieved chunks, as a percentage
+    scores = [c.get("score", 0) for c in chunks]
+    confidence = round((sum(scores) / len(scores)) * 100) if scores else 0
+
+    follow_ups = generate_follow_ups(query, answer)
 
     return {
-        "answer": response.choices[0].message.content,
+        "answer": answer,
         "sources": sources,
+        "confidence": confidence,
+        "follow_ups": follow_ups,
     }
 
 
