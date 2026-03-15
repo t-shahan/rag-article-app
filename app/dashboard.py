@@ -2,6 +2,9 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
+import uuid
+from datetime import datetime, timezone
+
 import streamlit as st
 from dotenv import load_dotenv
 from pymongo import MongoClient
@@ -10,7 +13,9 @@ from src.rag_chain import answer_question
 load_dotenv()
 
 mongo_client = MongoClient(os.getenv("MONGODB_URI"))
-collection = mongo_client[os.getenv("MONGODB_DB")]["articles"]
+db = mongo_client[os.getenv("MONGODB_DB")]
+collection = db["articles"]
+conversations = db["conversations"]
 
 
 def get_article_title(source):
@@ -19,6 +24,15 @@ def get_article_title(source):
     if doc and doc["text"].startswith("Title:"):
         return doc["text"].split("\n")[0].replace("Title:", "").strip()
     return source.split("/")[-1].replace(".txt", "").replace("_", " ").title()
+
+
+def save_conversation(session_id, messages):
+    """Persist the current message list to MongoDB."""
+    conversations.update_one(
+        {"session_id": session_id},
+        {"$set": {"messages": messages, "updated_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
 
 
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
@@ -40,6 +54,22 @@ if not st.session_state.authenticated:
                 st.error("Incorrect password")
     st.stop()
 
+# --- Session ID ---
+# Stored in the URL so it survives page refreshes.
+# Each browser tab gets its own session ID on first load.
+if "session_id" not in st.query_params:
+    st.query_params["session_id"] = str(uuid.uuid4())
+session_id = st.query_params["session_id"]
+
+# --- Load messages from MongoDB on first render ---
+# st.session_state is reset on refresh, so we restore from MongoDB using the session ID.
+if "messages" not in st.session_state:
+    saved = conversations.find_one({"session_id": session_id})
+    st.session_state.messages = saved["messages"] if saved else []
+
+if "copy_open" not in st.session_state:
+    st.session_state.copy_open = set()
+
 # --- Sidebar ---
 with st.sidebar:
     st.title("RAG Article App")
@@ -51,6 +81,7 @@ with st.sidebar:
         if st.button("Clear Chat", use_container_width=True):
             st.session_state.messages = []
             st.session_state.pop("copy_open", None)
+            save_conversation(session_id, [])
             st.rerun()
 
     st.markdown("""
@@ -79,11 +110,6 @@ if page == "Chat":
         unsafe_allow_html=True,
     )
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "copy_open" not in st.session_state:
-        st.session_state.copy_open = set()
-
     # Display chat history
     for i, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
@@ -107,13 +133,19 @@ if page == "Chat":
 
     # Chat input
     if query := st.chat_input("Ask anything about the articles..."):
+        # Build history from everything so far (before this new message)
+        chat_history = [
+            {"role": m["role"], "content": m["content"]}
+            for m in st.session_state.messages
+        ]
+
         st.session_state.messages.append({"role": "user", "content": query})
         with st.chat_message("user"):
             st.markdown(query)
 
         with st.chat_message("assistant"):
             with st.spinner(""):
-                result = answer_question(query)
+                result = answer_question(query, chat_history=chat_history)
             st.markdown(result["answer"])
             if result["sources"]:
                 with st.expander("Sources", expanded=False):
@@ -126,6 +158,9 @@ if page == "Chat":
             "content": result["answer"],
             "sources": result["sources"],
         })
+
+        # Persist the updated conversation to MongoDB
+        save_conversation(session_id, st.session_state.messages)
 
 
 # --- Page: Data Overview ---

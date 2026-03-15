@@ -44,11 +44,55 @@ def retrieve_chunks(query, k=4):
     return list(results)
 
 
-def answer_question(query):
+def condense_question(query, chat_history):
+    """Rewrite a follow-up question as a standalone question using conversation history.
+
+    Without this step, a follow-up like "What about its cost?" would be sent to
+    the vector search as-is — and the search wouldn't know what "it" refers to.
+    This rewrites it to something like "What is the cost of CRISPR gene editing?"
+    so retrieval works correctly.
+    """
+    if not chat_history:
+        return query
+
+    # Only look at the last 6 messages (3 exchanges) — enough context, avoids token waste
+    history_text = "\n".join(
+        f"{msg['role'].capitalize()}: {msg['content']}"
+        for msg in chat_history[-6:]
+    )
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Given this conversation:\n{history_text}\n\n"
+                f"Rewrite the follow-up question as a fully standalone question "
+                f"that includes all necessary context from the conversation. "
+                f"Return only the rewritten question, nothing else.\n\n"
+                f"Follow-up: {query}"
+            ),
+        }],
+        temperature=0,
+    )
+
+    return response.choices[0].message.content.strip()
+
+
+def answer_question(query, chat_history=None):
     """Retrieve relevant chunks then ask GPT-4o to answer using them.
+
+    chat_history is a list of {"role": "user"/"assistant", "content": "..."} dicts
+    representing prior turns in the conversation.
+
     Returns a dict with 'answer' and 'sources'.
     """
-    chunks = retrieve_chunks(query)
+    if chat_history is None:
+        chat_history = []
+
+    # Rewrite the query if it's a follow-up so vector search understands it
+    retrieval_query = condense_question(query, chat_history)
+    chunks = retrieve_chunks(retrieval_query)
 
     if not chunks:
         return {
@@ -56,26 +100,29 @@ def answer_question(query):
             "sources": [],
         }
 
-    # Build context string from retrieved chunks
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
 
-    prompt = f"""You are a helpful assistant. Use only the context below to answer the question.
-If the answer is not in the context, say so.
+    system_prompt = (
+        "You are a helpful assistant. Use only the provided context to answer questions. "
+        "If the answer is not in the context, say so."
+    )
 
-Context:
-{context}
-
-Question: {query}
-
-Answer:"""
+    # Build the messages array: system prompt + full conversation history + new question
+    # Cap history at 20 messages (~10 exchanges) to stay within token limits
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in chat_history[-20:]:
+        messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({
+        "role": "user",
+        "content": f"Context:\n{context}\n\nQuestion: {query}",
+    })
 
     response = openai_client.chat.completions.create(
         model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
+        messages=messages,
         temperature=0,
     )
 
-    # Deduplicate sources
     sources = list(dict.fromkeys(c["source"] for c in chunks))
 
     return {
