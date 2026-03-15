@@ -34,11 +34,14 @@ def get_article_title(source):
 
 def save_conversation(session_id, messages):
     """Persist the current message list to MongoDB."""
-    conversations.update_one(
-        {"session_id": session_id},
-        {"$set": {"messages": messages, "updated_at": datetime.now(timezone.utc)}},
-        upsert=True,
-    )
+    try:
+        conversations.update_one(
+            {"session_id": session_id},
+            {"$set": {"messages": messages, "updated_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+    except Exception as e:
+        st.warning(f"⚠️ Could not save conversation: {e}")
 
 
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
