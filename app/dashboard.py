@@ -164,7 +164,7 @@ elif page == "Data Overview":
             for i, chunk in enumerate(chunks):
                 st.markdown(
                     f"<div style='background:#f8f9fa; border-left: 3px solid #dee2e6; "
-                    f"padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; font-size: 0.85rem;'>"
+                    f"padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; font-size: 0.85rem; color: #212529;'>"
                     f"<strong>Chunk {i + 1}</strong><br>{chunk['text']}</div>",
                     unsafe_allow_html=True,
                 )
