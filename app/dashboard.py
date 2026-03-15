@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 import streamlit as st
+import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from src.rag_chain import answer_question
@@ -209,6 +210,7 @@ if page == "Chat":
 
 # --- Page: Data Overview ---
 elif page == "Data Overview":
+    components.html("<script>window.parent.scrollTo(0, 0);</script>", height=0)
     st.header("Data Overview")
 
     total_chunks = collection.count_documents({})
