@@ -6,7 +6,6 @@ import uuid
 from datetime import datetime, timezone
 
 import streamlit as st
-import streamlit.components.v1 as components
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from src.rag_chain import answer_question
@@ -220,15 +219,6 @@ if page == "Chat":
 
 # --- Page: Data Overview ---
 elif page == "Data Overview":
-    components.html("""
-        <script>
-            // Delay gives Streamlit time to finish rendering before we scroll,
-            // otherwise the scroll fires mid-render and the page jumps again.
-            setTimeout(function() {
-                window.parent.scrollTo({ top: 0, behavior: 'instant' });
-            }, 80);
-        </script>
-    """, height=0)
     st.header("Data Overview")
 
     total_chunks = collection.count_documents({})
@@ -244,26 +234,30 @@ elif page == "Data Overview":
     st.markdown("---")
     st.subheader("Articles")
 
-    for source in sources:
-        chunks = list(collection.find({"source": source}, {"text": 1, "_id": 0}).sort("chunk_index", 1))
-        chunk_count = len(chunks)
+    # Render all expanders inside a fixed-height scrollable container so the
+    # main page never scrolls — avoiding the jump caused by st.chat_input's
+    # scroll-to-bottom JS bleeding into this page on rerun.
+    with st.container(height=600):
+        for source in sources:
+            chunks = list(collection.find({"source": source}, {"text": 1, "_id": 0}).sort("chunk_index", 1))
+            chunk_count = len(chunks)
 
-        first_text = chunks[0]["text"] if chunks else ""
-        if first_text.startswith("Title:"):
-            title = first_text.split("\n")[0].replace("Title:", "").strip()
-            preview = first_text.split("\n\n", 1)[-1][:200] + "..."
-        else:
-            title = source.split("/")[-1].replace(".txt", "").replace("_", " ").title()
-            preview = first_text[:200] + "..."
+            first_text = chunks[0]["text"] if chunks else ""
+            if first_text.startswith("Title:"):
+                title = first_text.split("\n")[0].replace("Title:", "").strip()
+                preview = first_text.split("\n\n", 1)[-1][:200] + "..."
+            else:
+                title = source.split("/")[-1].replace(".txt", "").replace("_", " ").title()
+                preview = first_text[:200] + "..."
 
-        with st.expander(f"**{title}** — {chunk_count} chunks"):
-            st.caption(f"S3 key: `{source}`")
-            st.markdown(f"*{preview}*")
-            st.markdown("**Chunks:**")
-            for i, chunk in enumerate(chunks):
-                st.markdown(
-                    f"<div style='background:#f8f9fa; border-left: 3px solid #dee2e6; "
-                    f"padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; font-size: 0.85rem; color: #212529;'>"
-                    f"<strong>Chunk {i + 1}</strong><br>{chunk['text']}</div>",
-                    unsafe_allow_html=True,
-                )
+            with st.expander(f"**{title}** — {chunk_count} chunks"):
+                st.caption(f"S3 key: `{source}`")
+                st.markdown(f"*{preview}*")
+                st.markdown("**Chunks:**")
+                for i, chunk in enumerate(chunks):
+                    st.markdown(
+                        f"<div style='background:#f8f9fa; border-left: 3px solid #dee2e6; "
+                        f"padding: 8px 12px; margin-bottom: 6px; border-radius: 4px; font-size: 0.85rem; color: #212529;'>"
+                        f"<strong>Chunk {i + 1}</strong><br>{chunk['text']}</div>",
+                        unsafe_allow_html=True,
+                    )
