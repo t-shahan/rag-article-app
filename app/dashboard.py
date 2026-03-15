@@ -106,7 +106,7 @@ with st.sidebar:
             position: fixed;
             bottom: 2rem;
             font-size: 0.75rem;
-            color: rgba(49, 51, 63, 0.4);
+            color: rgba(250, 250, 250, 0.4);
         }
         </style>
         <div class="sidebar-footer">Powered by OpenAI · MongoDB Atlas · AWS S3</div>
