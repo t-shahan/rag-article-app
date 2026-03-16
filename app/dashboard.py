@@ -44,6 +44,29 @@ def save_conversation(session_id, messages):
         st.warning(f"⚠️ Could not save conversation: {e}")
 
 
+def render_page_header(title: str, subtitle: str = ""):
+    """Render a consistent page header across all pages."""
+    subtitle_html = (
+        f'<p style="font-size: 0.9rem; color: rgba(250,250,250,0.55); margin: 0;">{subtitle}</p>'
+        if subtitle else ""
+    )
+    st.markdown(f"""
+        <div style="
+            padding: 1.5rem 0 0.5rem 0;
+            border-bottom: 1px solid rgba(250, 250, 250, 0.12);
+            margin-bottom: 1.5rem;
+        ">
+            <h1 style="
+                font-size: 1.75rem;
+                font-weight: 700;
+                margin: 0 0 0.25rem 0;
+                letter-spacing: -0.02em;
+            ">{title}</h1>
+            {subtitle_html}
+        </div>
+    """, unsafe_allow_html=True)
+
+
 st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_state="expanded")
 
 # Disable scroll anchoring globally so the browser doesn't jump when
@@ -51,7 +74,7 @@ st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_
 st.markdown("""
     <style>
     section[data-testid="stMain"] { overflow-anchor: none; }
-    </style>
+</style>
 """, unsafe_allow_html=True)
 
 # --- Password gate ---
@@ -86,25 +109,36 @@ if "messages" not in st.session_state:
     saved = conversations.find_one({"session_id": session_id})
     st.session_state.messages = saved["messages"] if saved else []
 
-if "copy_open" not in st.session_state:
-    st.session_state.copy_open = set()
+if "page" not in st.session_state:
+    st.session_state.page = "Chat"
 
 # --- Sidebar ---
 with st.sidebar:
-    st.title("RAG Article App")
-    st.markdown("---")
-    page = st.radio("Navigate", ["Chat", "Data Overview"], label_visibility="collapsed")
-
-    if page == "Chat":
-        st.markdown("")
-        if st.button("Clear Chat", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.pop("copy_open", None)
-            save_conversation(session_id, [])
-            st.rerun()
+    st.markdown(
+        "<div style='font-size: 1.2rem; font-weight: 700; padding: 0.25rem 0 1rem 0;'>"
+        "RAG Article App</div>",
+        unsafe_allow_html=True,
+    )
 
     st.markdown("""
         <style>
+        div[data-testid="stSidebar"] div.stButton > button {
+            background: none;
+            border: none;
+            color: rgba(250, 250, 250, 0.75);
+            font-size: 0.95rem;
+            font-weight: 400;
+            text-align: left;
+            width: 100%;
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        div[data-testid="stSidebar"] div.stButton > button:hover {
+            background: rgba(250, 250, 250, 0.08);
+            color: rgba(250, 250, 250, 1);
+        }
         .sidebar-footer {
             position: fixed;
             bottom: 2rem;
@@ -112,21 +146,38 @@ with st.sidebar:
             color: rgba(250, 250, 250, 0.4);
         }
         </style>
-        <div class="sidebar-footer">Powered by OpenAI · MongoDB Atlas · AWS S3</div>
     """, unsafe_allow_html=True)
+
+    chat_label = "→ Chat" if st.session_state.page == "Chat" else "   Chat"
+    data_label = "→ Data Overview" if st.session_state.page == "Data Overview" else "   Data Overview"
+
+    if st.button(chat_label, key="nav_chat", use_container_width=True):
+        st.session_state.page = "Chat"
+        st.rerun()
+
+    if st.button(data_label, key="nav_data", use_container_width=True):
+        st.session_state.page = "Data Overview"
+        st.rerun()
+
+    st.markdown("---")
+
+    if st.session_state.page == "Chat":
+        if st.button("Clear Chat", use_container_width=True):
+            st.session_state.messages = []
+            save_conversation(session_id, [])
+            st.rerun()
+
+    st.markdown(
+        '<div class="sidebar-footer">Powered by OpenAI · MongoDB Atlas · AWS S3</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # --- Page: Chat ---
-if page == "Chat":
-    st.markdown(
-        "<h2 style='text-align: center; font-weight: 600;'>What do you want to know?</h2>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        "<p style='text-align: center; color: gray; margin-bottom: 2rem;'>"
-        "Answers are grounded in the articles stored in MongoDB Atlas."
-        "</p>",
-        unsafe_allow_html=True,
+if st.session_state.page == "Chat":
+    render_page_header(
+        "What do you want to know?",
+        "Answers are grounded in the articles stored in MongoDB Atlas.",
     )
 
     # Display chat history
@@ -164,15 +215,6 @@ if page == "Chat":
                             st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
 
-                if st.button("📋 Copy", key=f"copy_btn_{i}"):
-                    if i in st.session_state.copy_open:
-                        st.session_state.copy_open.discard(i)
-                    else:
-                        st.session_state.copy_open.add(i)
-                    st.rerun()
-
-                if i in st.session_state.copy_open:
-                    st.text_area("Response text", value=msg["content"], height=150, key=f"copy_area_{i}")
 
     # Handle follow-up button clicks — picked up on the rerun after a button is pressed
     followup = st.session_state.pop("followup_query", None)
@@ -232,8 +274,11 @@ if page == "Chat":
 
 
 # --- Page: Data Overview ---
-elif page == "Data Overview":
-    st.header("Data Overview")
+elif st.session_state.page == "Data Overview":
+    render_page_header(
+        "Data Overview",
+        "Articles, chunks, and embeddings stored in MongoDB Atlas.",
+    )
 
     total_chunks = collection.count_documents({})
     sources = sorted(collection.distinct("source"))
