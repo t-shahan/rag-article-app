@@ -148,8 +148,8 @@ with st.sidebar:
         </style>
     """, unsafe_allow_html=True)
 
-    chat_label = "→ Chat" if st.session_state.page == "Chat" else "   Chat"
-    data_label = "→ Data Overview" if st.session_state.page == "Data Overview" else "   Data Overview"
+    chat_label = "Chat"
+    data_label = "Data Overview"
 
     if st.button(chat_label, key="nav_chat", use_container_width=True):
         st.session_state.page = "Chat"
@@ -175,10 +175,37 @@ with st.sidebar:
 
 # --- Page: Chat ---
 if st.session_state.page == "Chat":
-    render_page_header(
-        "What do you want to know?",
-        "Answers are grounded in the articles stored in MongoDB Atlas.",
-    )
+    if not st.session_state.messages:
+        # Hero empty state
+        st.markdown("""
+            <div style="text-align: center; padding: 4rem 0 2.5rem 0;">
+                <h1 style="font-size: 2.75rem; font-weight: 800; margin-bottom: 0.75rem; letter-spacing: -0.03em;">
+                    What do you want to know?
+                </h1>
+                <p style="color: rgba(250,250,250,0.5); font-size: 1rem; margin: 0;">
+                    Ask anything across 25 articles on technology, science, and society.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        prompts = [
+            "How do large language models work?",
+            "What are the risks and benefits of nuclear energy?",
+            "How is CRISPR being used to treat genetic diseases?",
+            "How might AI and automation affect the future of jobs?",
+        ]
+        col1, col2 = st.columns(2)
+        for i, prompt in enumerate(prompts):
+            col = col1 if i % 2 == 0 else col2
+            with col:
+                if st.button(prompt, key=f"starter_{i}", use_container_width=True):
+                    st.session_state.followup_query = prompt
+                    st.rerun()
+    else:
+        render_page_header(
+            "What do you want to know?",
+            "Answers are grounded in the articles stored in MongoDB Atlas.",
+        )
 
     # Display chat history
     for i, msg in enumerate(st.session_state.messages):
@@ -271,6 +298,7 @@ if st.session_state.page == "Chat":
                         st.rerun()
 
         save_conversation(session_id, st.session_state.messages)
+        st.rerun()
 
 
 # --- Page: Data Overview ---
