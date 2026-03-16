@@ -74,7 +74,23 @@ st.set_page_config(page_title="RAG Article App", layout="wide", initial_sidebar_
 st.markdown("""
     <style>
     section[data-testid="stMain"] { overflow-anchor: none; }
-</style>
+    .stApp {
+        background-color: #0e0e0e;
+    }
+    section[data-testid="stSidebar"] > div:first-child {
+        background-color: #0e1117;
+    }
+    .stApp::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 9999;
+        opacity: 0.12;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 180px 180px;
+    }
+    </style>
 """, unsafe_allow_html=True)
 
 # --- Password gate ---
