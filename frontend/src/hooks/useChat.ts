@@ -73,14 +73,10 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
         throw new Error(`HTTP ${response.status}`)
       }
 
-      // Push an empty assistant message — we'll fill it in token by token
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
-      setLoading(false)
-      setStreaming(true)
-
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let assistantPushed = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -100,14 +96,22 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
           try { data = JSON.parse(payload) } catch { continue }
 
           if (data.chunk) {
-            // Append token to the last message
-            setMessages((prev) => {
-              const last = prev[prev.length - 1]
-              return [
-                ...prev.slice(0, -1),
-                { ...last, content: last.content + (data.chunk as string) },
-              ]
-            })
+            if (!assistantPushed) {
+              // First token: swap loading dots for the assistant bubble in one update
+              assistantPushed = true
+              setLoading(false)
+              setStreaming(true)
+              setMessages((prev) => [...prev, { role: 'assistant', content: data.chunk as string }])
+            } else {
+              // Append subsequent tokens to the last message
+              setMessages((prev) => {
+                const last = prev[prev.length - 1]
+                return [
+                  ...prev.slice(0, -1),
+                  { ...last, content: last.content + (data.chunk as string) },
+                ]
+              })
+            }
           } else if (data.done) {
             // Attach metadata to the last message
             setMessages((prev) => {
@@ -123,25 +127,23 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
               ]
             })
           } else if (data.error) {
-            setMessages((prev) => {
-              const last = prev[prev.length - 1]
-              return [
-                ...prev.slice(0, -1),
-                { ...last, content: data.error as string },
-              ]
-            })
+            setLoading(false)
+            if (assistantPushed) {
+              setMessages((prev) => {
+                const last = prev[prev.length - 1]
+                return [...prev.slice(0, -1), { ...last, content: data.error as string }]
+              })
+            } else {
+              setMessages((prev) => [...prev, { role: 'assistant', content: data.error as string }])
+            }
           }
         }
       }
     } catch {
-      setMessages((prev) => {
-        // If the empty assistant message was already pushed, update it; otherwise append
-        const last = prev[prev.length - 1]
-        if (last?.role === 'assistant' && last.content === '') {
-          return [...prev.slice(0, -1), { ...last, content: 'Sorry, something went wrong. Please try again.' }]
-        }
-        return [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]
-      })
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
+      ])
     } finally {
       setLoading(false)
       setStreaming(false)
