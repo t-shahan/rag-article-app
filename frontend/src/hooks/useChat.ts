@@ -113,7 +113,7 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
               })
             }
           } else if (data.done) {
-            // Attach metadata to the last message
+            // Attach sources + confidence immediately; follow_ups arrive in the next event
             setMessages((prev) => {
               const last = prev[prev.length - 1]
               return [
@@ -122,8 +122,15 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
                   ...last,
                   sources: data.sources as string[],
                   confidence: data.confidence as number | null,
-                  follow_ups: data.follow_ups as string[],
                 },
+              ]
+            })
+          } else if (data.follow_ups) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                { ...last, follow_ups: data.follow_ups as string[] },
               ]
             })
           } else if (data.error) {
