@@ -52,7 +52,7 @@ export default function DataOverviewPage() {
       ) : filtered.length === 0 ? (
         <p className="text-sm text-gray-500">No articles match "{query}"</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="flex flex-col gap-2">
           {filtered.map((a) => (
             <ArticleCard key={a.source} article={a} />
           ))}

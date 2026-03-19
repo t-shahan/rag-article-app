@@ -33,21 +33,31 @@ def list_articles():
         ])
     }
 
-    # Fetch the first chunk of every article in one query for preview text
-    first_chunks = {
-        doc["source"]: doc["text"]
-        for doc in articles_col.find({"chunk_index": 0}, {"source": 1, "text": 1, "_id": 0})
-    }
+    # Fetch the first two chunks of every article for preview text.
+    # Chunk 0 is sometimes just the title line with no body text, so we
+    # keep chunk 1 as a fallback.
+    preview_chunks: dict[str, dict[int, str]] = {}
+    for doc in articles_col.find(
+        {"chunk_index": {"$in": [0, 1]}},
+        {"source": 1, "chunk_index": 1, "text": 1, "_id": 0},
+    ):
+        preview_chunks.setdefault(doc["source"], {})[doc["chunk_index"]] = doc["text"]
+
+    def extract_preview(source: str) -> str:
+        chunks = preview_chunks.get(source, {})
+        for idx in (0, 1):
+            text = chunks.get(idx, "")
+            content = " ".join(
+                line.strip() for line in text.split("\n")
+                if line.strip() and not line.startswith("Title:")
+            )
+            if content:
+                return (content[:160].rsplit(" ", 1)[0] + "…") if len(content) > 160 else content
+        return ""
 
     result = []
     for source, chunk_count in stats.items():
-        text = first_chunks.get(source, "")
-        # Strip the "Title: ..." header line, then take the first ~160 chars
-        content = " ".join(
-            line.strip() for line in text.split("\n")
-            if line.strip() and not line.startswith("Title:")
-        )
-        preview = (content[:160].rsplit(" ", 1)[0] + "…") if len(content) > 160 else content
+        preview = extract_preview(source)
         result.append({
             "source": source,
             "title": clean_title(source),
