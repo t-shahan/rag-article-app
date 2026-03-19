@@ -11,20 +11,15 @@ Scalability notes:
 - ensure_metadata() populates article_metadata from the articles collection
   the first time the endpoint is hit; re-run by clearing the collection.
 """
-import os
 import re
 
 from fastapi import APIRouter, Depends
-from pymongo import MongoClient, ASCENDING, TEXT
+from pymongo import ASCENDING, TEXT
 
+from db import articles_col, article_metadata_col as metadata_col
 from routes.deps import require_auth
 
 router = APIRouter()
-
-mongo_client = MongoClient(os.getenv("MONGODB_URI"))
-db = mongo_client[os.getenv("MONGODB_DB", "rag_db")]
-articles_col = db["articles"]
-metadata_col = db["article_metadata"]
 
 _metadata_ready = False
 
@@ -62,9 +57,8 @@ def ensure_metadata():
     if _metadata_ready:
         return
 
-    # Create indexes (no-op if they already exist)
-    metadata_col.create_index("source", unique=True)
-    metadata_col.create_index([("title", TEXT)])  # enables fast $text search
+    # Text index for search — no-op if already exists
+    metadata_col.create_index([("title", TEXT)])
 
     if metadata_col.count_documents({}) == 0:
         _rebuild_metadata()
@@ -110,8 +104,9 @@ def list_articles(q: str = "", limit: int = 50, skip: int = 0):
     ensure_metadata()
     limit = min(limit, 200)
 
+    # re.escape() prevents a crafted search string from causing ReDoS
     filter_query = (
-        {"title": {"$regex": q.strip(), "$options": "i"}}
+        {"title": {"$regex": re.escape(q.strip()), "$options": "i"}}
         if q.strip() else {}
     )
 

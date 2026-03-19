@@ -1,6 +1,7 @@
 # FastAPI — web framework
 fastapi
 uvicorn[standard]
+slowapi
 
 # Auth — JWT tokens + password hashing
 python-jose[cryptography]

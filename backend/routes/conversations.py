@@ -1,19 +1,15 @@
 """Conversation CRUD endpoints."""
-import os
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from pymongo import MongoClient, DESCENDING
+from pymongo import DESCENDING
 
+from db import conversations_col
 from routes.deps import require_auth
 
 router = APIRouter()
-
-mongo_client = MongoClient(os.getenv("MONGODB_URI"))
-db = mongo_client[os.getenv("MONGODB_DB", "rag_db")]
-conversations_col = db["conversations"]
 
 
 class CreateConversationRequest(BaseModel):

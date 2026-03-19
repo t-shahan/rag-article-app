@@ -1,19 +1,21 @@
 import os
+import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel
 from jose import jwt
 from passlib.context import CryptContext
 
+from limiter import limiter
+
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# bcrypt context for verifying the hashed password stored in the env var.
-# The Streamlit app used a plaintext password — here we require the admin to
-# set APP_PASSWORD_HASH (a bcrypt hash). See README for how to generate one.
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
+# No default — main.py already enforced this is set at startup
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -29,30 +31,23 @@ class TokenResponse(BaseModel):
 
 def create_access_token(data: dict, expires_delta: timedelta) -> str:
     payload = data.copy()
-    expire = datetime.now(timezone.utc) + expires_delta
-    payload.update({"exp": expire})
+    payload.update({"exp": datetime.now(timezone.utc) + expires_delta})
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(body: LoginRequest):
+@limiter.limit("10/minute")
+def login(request: Request, body: LoginRequest):
     password_hash = os.getenv("APP_PASSWORD_HASH", "")
-
-    # Fallback: if no hash is set, accept the plaintext APP_PASSWORD directly.
-    # This lets the app work without re-hashing during migration.
-    plaintext_password = os.getenv("APP_PASSWORD", "")
-
-    if password_hash:
-        valid = pwd_context.verify(body.password, password_hash)
-    elif plaintext_password:
-        valid = body.password == plaintext_password
-    else:
+    if not password_hash:
+        logger.error("APP_PASSWORD_HASH is not configured")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="No password configured on server.",
+            detail="Server authentication is not configured.",
         )
 
-    if not valid:
+    if not pwd_context.verify(body.password, password_hash):
+        logger.warning("Failed login attempt from %s", request.client.host if request.client else "unknown")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password.",

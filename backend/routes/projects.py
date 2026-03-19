@@ -1,20 +1,14 @@
 """Project CRUD endpoints."""
-import os
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from pymongo import MongoClient
 
+from db import projects_col, conversations_col
 from routes.deps import require_auth
 
 router = APIRouter()
-
-mongo_client = MongoClient(os.getenv("MONGODB_URI"))
-db = mongo_client[os.getenv("MONGODB_DB", "rag_db")]
-projects_col = db["projects"]
-conversations_col = db["conversations"]
 
 
 class CreateProjectRequest(BaseModel):
