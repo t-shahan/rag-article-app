@@ -24,7 +24,22 @@ export default function Message({ message, isLast, onFollowUp }: Props) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] space-y-2">
-        <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white/5 border border-white/8 text-gray-200 text-sm prose prose-invert prose-sm max-w-none">
+        <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white/5 border border-white/8 text-sm
+          prose prose-invert prose-sm max-w-none
+          prose-p:text-gray-200 prose-p:my-1.5 prose-p:leading-relaxed
+          prose-ul:text-gray-200 prose-ul:my-1.5 prose-ul:pl-4
+          prose-ol:text-gray-200 prose-ol:my-1.5 prose-ol:pl-4
+          prose-li:text-gray-200 prose-li:my-0.5 prose-li:marker:text-gray-500
+          prose-strong:text-gray-100 prose-strong:font-semibold
+          prose-em:text-gray-300
+          prose-code:text-[#C2B067] prose-code:bg-white/8 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:font-mono prose-code:before:content-none prose-code:after:content-none
+          prose-pre:bg-white/8 prose-pre:border prose-pre:border-white/10 prose-pre:rounded-xl prose-pre:text-xs
+          prose-h1:text-gray-100 prose-h1:text-base prose-h1:font-semibold prose-h1:mt-3 prose-h1:mb-1
+          prose-h2:text-gray-100 prose-h2:text-sm prose-h2:font-semibold prose-h2:mt-3 prose-h2:mb-1
+          prose-h3:text-gray-200 prose-h3:text-sm prose-h3:font-medium prose-h3:mt-2 prose-h3:mb-1
+          prose-blockquote:border-l-[#C2B067]/50 prose-blockquote:text-gray-400 prose-blockquote:not-italic
+          prose-hr:border-white/10
+        ">
           <ReactMarkdown>{message.content}</ReactMarkdown>
         </div>
         <div className="px-1 space-y-2">
