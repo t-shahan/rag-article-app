@@ -1,0 +1,19 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Frontend (not needed in backend build context)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Data / assets
+data/
+
+# Git / IDE
+.git/
+.gitignore
+*.md

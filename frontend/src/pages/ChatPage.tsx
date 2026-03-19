@@ -1,0 +1,77 @@
+/**
+ * ChatPage — the main chat interface.
+ *
+ * Empty state: hero title + 4 clickable starter prompts (same as Streamlit).
+ * Active state: MessageList + ChatInput.
+ *
+ * session_id lives in the URL (?session_id=uuid). When a new conversation is
+ * created (first message sent), useChat calls onSessionCreated which updates the URL.
+ */
+import { useSearchParams } from 'react-router-dom'
+import { useChat } from '../hooks/useChat'
+import MessageList from '../components/Chat/MessageList'
+import ChatInput from '../components/Chat/ChatInput'
+
+const STARTER_PROMPTS = [
+  'How has the cost of solar panels changed over time?',
+  'What is CRISPR and how does gene editing work?',
+  'How does large language model training work?',
+  'What are the main causes of antibiotic resistance?',
+]
+
+export default function ChatPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const sessionId = searchParams.get('session_id')
+
+  const { messages, loading, sendMessage } = useChat({
+    sessionId,
+    onSessionCreated: (id) => {
+      // Update the URL with the new session_id without re-mounting the component
+      setSearchParams({ session_id: id }, { replace: true })
+    },
+  })
+
+  const hasMessages = messages.length > 0
+
+  return (
+    <div className="flex flex-col flex-1 h-screen overflow-hidden">
+      {/* Page header — compact once chat starts */}
+      <header className="flex-shrink-0 px-6 pt-6 pb-2">
+        {!hasMessages && (
+          <div className="text-center py-8">
+            <h1 className="text-2xl font-semibold text-gray-100 mb-1">RAG Article App</h1>
+            <p className="text-sm text-gray-500">Ask anything across 25 curated articles.</p>
+          </div>
+        )}
+      </header>
+
+      {/* Empty state starter prompts */}
+      {!hasMessages && (
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-3 pb-24">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
+            {STARTER_PROMPTS.map((prompt) => (
+              <button
+                key={prompt}
+                onClick={() => sendMessage(prompt)}
+                disabled={loading}
+                className="text-left px-4 py-3 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-sm text-gray-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Message list */}
+      {hasMessages && (
+        <MessageList messages={messages} loading={loading} onFollowUp={sendMessage} />
+      )}
+
+      {/* Input */}
+      <div className="flex-shrink-0">
+        <ChatInput onSend={sendMessage} disabled={loading} />
+      </div>
+    </div>
+  )
+}

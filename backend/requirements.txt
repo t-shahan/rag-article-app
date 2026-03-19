@@ -1,0 +1,19 @@
+# FastAPI — web framework
+fastapi
+uvicorn[standard]
+
+# Auth — JWT tokens + password hashing
+python-jose[cryptography]
+passlib[bcrypt]
+
+# OpenAI — LLM + embeddings (used by rag_chain.py)
+openai
+
+# MongoDB — vector store + conversation history
+pymongo
+
+# AWS S3 — article storage (used by rag_chain.py)
+boto3
+
+# Environment variable management
+python-dotenv

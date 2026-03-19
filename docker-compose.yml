@@ -1,7 +1,24 @@
 services:
-  app:
-    build: .
-    ports:
-      - "8501:8501"
+
+  backend:
+    build:
+      # Root context lets the Dockerfile reach both backend/ and src/
+      context: .
+      dockerfile: backend/Dockerfile
     env_file:
       - .env
+    # Expose on host for local testing; in production Nginx proxies to this port internally.
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      # Frontend context is self-contained — no parent files needed
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
