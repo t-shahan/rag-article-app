@@ -6,6 +6,7 @@ slowapi
 # Auth — JWT tokens + password hashing
 python-jose[cryptography]
 passlib[bcrypt]
+bcrypt==4.0.1
 
 # OpenAI — LLM + embeddings (used by rag_chain.py)
 openai
