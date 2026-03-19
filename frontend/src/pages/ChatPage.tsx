@@ -23,7 +23,7 @@ export default function ChatPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const sessionId = searchParams.get('session_id')
 
-  const { messages, loading, sendMessage } = useChat({
+  const { messages, loading, streaming, sendMessage } = useChat({
     sessionId,
     onSessionCreated: (id) => {
       // Update the URL with the new session_id without re-mounting the component
@@ -53,7 +53,7 @@ export default function ChatPage() {
               <button
                 key={prompt}
                 onClick={() => sendMessage(prompt)}
-                disabled={loading}
+                disabled={loading || streaming}
                 className="text-left px-4 py-3 rounded-xl border border-white/10 bg-white/4 hover:bg-white/8 text-sm text-gray-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
               >
                 {prompt}
@@ -70,7 +70,7 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="flex-shrink-0">
-        <ChatInput onSend={sendMessage} disabled={loading} />
+        <ChatInput onSend={sendMessage} disabled={loading || streaming} />
       </div>
     </div>
   )

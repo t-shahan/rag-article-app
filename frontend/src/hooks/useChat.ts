@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import client from '../api/client'
-import type { ChatResponse } from '../types'
+import client, { TOKEN_KEY } from '../api/client'
 
 export interface ChatMessage {
   role: 'user' | 'assistant'
@@ -17,18 +16,15 @@ interface UseChatOptions {
 
 export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(false)    // true = waiting for first token (show dots)
+  const [streaming, setStreaming] = useState(false) // true = tokens arriving (input disabled)
   const activeSessionId = useRef<string | null>(sessionId)
-  // When we create a new conversation ourselves, the sessionId change triggers
-  // the history-fetch effect — but the conversation is empty at that point and
-  // would wipe the optimistic user message. This flag skips that one fetch.
   const skipNextFetch = useRef(false)
 
   useEffect(() => {
     activeSessionId.current = sessionId
   }, [sessionId])
 
-  // Load history when navigating to an existing conversation
   useEffect(() => {
     if (!sessionId) {
       setMessages([])
@@ -45,46 +41,112 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
   }, [sessionId])
 
   async function sendMessage(question: string) {
-    if (loading) return
+    if (loading || streaming) return
 
-    // Show loading dots + user message immediately before any async work
     setLoading(true)
     setMessages((prev) => [...prev, { role: 'user', content: question }])
 
     try {
+      // Create conversation on first message
       let sid = activeSessionId.current
       if (!sid) {
-        const res = await client.post('/api/conversations', {
-          title: question.slice(0, 60),
-        })
+        const res = await client.post('/api/conversations', { title: question.slice(0, 60) })
         sid = res.data.session_id as string
         activeSessionId.current = sid
-        // Tell the effect to skip the next fetch — we know the conversation is empty
         skipNextFetch.current = true
         onSessionCreated(sid)
       }
 
       const history = messages.map((m) => ({ role: m.role, content: m.content }))
-      const res = await client.post<ChatResponse>('/api/chat', {
-        question,
-        session_id: sid,
-        chat_history: history,
+      const token = localStorage.getItem(TOKEN_KEY) ?? ''
+
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ question, session_id: sid, chat_history: history }),
       })
 
-      const { answer, sources, confidence, follow_ups } = res.data
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: answer, sources, confidence, follow_ups },
-      ])
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      // Push an empty assistant message — we'll fill it in token by token
+      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
+      setLoading(false)
+      setStreaming(true)
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        // Decode incrementally; buffer handles chunks that split across SSE boundaries
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? '' // last element may be an incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const payload = line.slice(6).trim()
+          if (!payload) continue
+
+          let data: Record<string, unknown>
+          try { data = JSON.parse(payload) } catch { continue }
+
+          if (data.chunk) {
+            // Append token to the last message
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                { ...last, content: last.content + (data.chunk as string) },
+              ]
+            })
+          } else if (data.done) {
+            // Attach metadata to the last message
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                {
+                  ...last,
+                  sources: data.sources as string[],
+                  confidence: data.confidence as number | null,
+                  follow_ups: data.follow_ups as string[],
+                },
+              ]
+            })
+          } else if (data.error) {
+            setMessages((prev) => {
+              const last = prev[prev.length - 1]
+              return [
+                ...prev.slice(0, -1),
+                { ...last, content: data.error as string },
+              ]
+            })
+          }
+        }
+      }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' },
-      ])
+      setMessages((prev) => {
+        // If the empty assistant message was already pushed, update it; otherwise append
+        const last = prev[prev.length - 1]
+        if (last?.role === 'assistant' && last.content === '') {
+          return [...prev.slice(0, -1), { ...last, content: 'Sorry, something went wrong. Please try again.' }]
+        }
+        return [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Please try again.' }]
+      })
     } finally {
       setLoading(false)
+      setStreaming(false)
     }
   }
 
-  return { messages, loading, sendMessage }
+  return { messages, loading, streaming, sendMessage }
 }
