@@ -57,7 +57,7 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
         onSessionCreated(sid)
       }
 
-      const history = messages.map((m) => ({ role: m.role, content: m.content }))
+      const history = messages.map((m) => ({ role: m.role, content: m.content, sources: m.sources ?? [] }))
       const token = localStorage.getItem(TOKEN_KEY) ?? ''
 
       const response = await fetch('/api/chat/stream', {

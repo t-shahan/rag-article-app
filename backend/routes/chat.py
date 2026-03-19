@@ -13,6 +13,7 @@ from pymongo import MongoClient
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "src"))
 from rag_chain import (  # noqa: E402
     answer_question,
+    build_citation_manifest,
     condense_question,
     retrieve_chunks,
     generate_follow_ups,
@@ -30,6 +31,7 @@ conversations_col = db["conversations"]
 class Message(BaseModel):
     role: str
     content: str
+    sources: list[str] = []
 
 
 class ChatRequest(BaseModel):
@@ -50,7 +52,7 @@ class ChatResponse(BaseModel):
 
 @router.post("/chat", response_model=ChatResponse, dependencies=[Depends(require_auth)])
 def chat(body: ChatRequest):
-    history = [{"role": m.role, "content": m.content} for m in body.chat_history]
+    history = [{"role": m.role, "content": m.content, "sources": m.sources} for m in body.chat_history]
     result = answer_question(body.question, chat_history=history)
 
     if body.session_id:
@@ -85,7 +87,7 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
     """Sync SSE generator — FastAPI runs sync routes in a thread pool so this
     won't block the event loop. Each yield sends one SSE message to the client.
     """
-    history = [{"role": m.role, "content": m.content} for m in body.chat_history]
+    history = [{"role": m.role, "content": m.content, "sources": m.sources} for m in body.chat_history]
 
     # Rewrite follow-up questions and retrieve relevant chunks
     retrieval_query = condense_question(body.question, history)
@@ -100,10 +102,14 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
     scores = [c.get("score", 0) for c in chunks]
     confidence = round((sum(scores) / len(scores)) * 100) if scores else 0
 
+    citation_manifest = build_citation_manifest(history)
     system_prompt = (
         "You are a helpful assistant. Use only the provided context to answer questions. "
         "If the answer is not in the context, say so."
     )
+    if citation_manifest:
+        system_prompt += f"\n\n{citation_manifest}"
+
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history[-20:]:
         messages.append({"role": msg["role"], "content": msg["content"]})

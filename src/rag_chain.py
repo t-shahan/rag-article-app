@@ -104,11 +104,33 @@ def condense_question(query, chat_history):
         return query
 
 
+def build_citation_manifest(chat_history):
+    """Build a summary of sources previously cited in the conversation.
+
+    This is prepended to the system prompt so the model knows which articles
+    have already been referenced — helpful for follow-up questions where the
+    current retrieval might pull different chunks than earlier turns did.
+    """
+    cited = []
+    seen = set()
+    for msg in chat_history:
+        if msg.get("role") == "assistant":
+            for src in msg.get("sources", []):
+                if src not in seen:
+                    cited.append(src)
+                    seen.add(src)
+    if not cited:
+        return ""
+    lines = ["Previously cited articles in this conversation:"] + [f"- {src}" for src in cited]
+    return "\n".join(lines)
+
+
 def answer_question(query, chat_history=None):
     """Retrieve relevant chunks then ask GPT-4o to answer using them.
 
-    chat_history is a list of {"role": "user"/"assistant", "content": "..."} dicts
-    representing prior turns in the conversation.
+    chat_history is a list of {"role": "user"/"assistant", "content": "...", "sources": [...]} dicts
+    representing prior turns in the conversation. The sources field on assistant messages is used
+    to build a citation manifest so the model knows what was previously referenced.
 
     Returns a dict with 'answer', 'sources', 'confidence', and 'follow_ups'.
     """
@@ -129,10 +151,13 @@ def answer_question(query, chat_history=None):
 
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
 
+    citation_manifest = build_citation_manifest(chat_history)
     system_prompt = (
         "You are a helpful assistant. Use only the provided context to answer questions. "
         "If the answer is not in the context, say so."
     )
+    if citation_manifest:
+        system_prompt += f"\n\n{citation_manifest}"
 
     # Build the messages array: system prompt + full conversation history + new question
     # Cap history at 20 messages (~10 exchanges) to stay within token limits
