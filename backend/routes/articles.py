@@ -24,15 +24,37 @@ def clean_title(source: str) -> str:
 
 @router.get("/articles", dependencies=[Depends(require_auth)])
 def list_articles():
-    pipeline = [
-        {"$group": {"_id": "$source", "chunk_count": {"$sum": 1}}},
-        {"$sort": {"_id": 1}},
-        {"$project": {"_id": 0, "source": "$_id", "chunk_count": 1}},
-    ]
-    return [
-        {"source": doc["source"], "title": clean_title(doc["source"]), "chunk_count": doc["chunk_count"]}
-        for doc in articles_col.aggregate(pipeline)
-    ]
+    # Aggregate chunk counts per source
+    stats = {
+        doc["_id"]: doc["chunk_count"]
+        for doc in articles_col.aggregate([
+            {"$group": {"_id": "$source", "chunk_count": {"$sum": 1}}},
+            {"$sort": {"_id": 1}},
+        ])
+    }
+
+    # Fetch the first chunk of every article in one query for preview text
+    first_chunks = {
+        doc["source"]: doc["text"]
+        for doc in articles_col.find({"chunk_index": 0}, {"source": 1, "text": 1, "_id": 0})
+    }
+
+    result = []
+    for source, chunk_count in stats.items():
+        text = first_chunks.get(source, "")
+        # Strip the "Title: ..." header line, then take the first ~160 chars
+        content = " ".join(
+            line.strip() for line in text.split("\n")
+            if line.strip() and not line.startswith("Title:")
+        )
+        preview = (content[:160].rsplit(" ", 1)[0] + "…") if len(content) > 160 else content
+        result.append({
+            "source": source,
+            "title": clean_title(source),
+            "chunk_count": chunk_count,
+            "preview": preview,
+        })
+    return result
 
 
 @router.get("/articles/chunks", dependencies=[Depends(require_auth)])

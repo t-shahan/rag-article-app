@@ -33,4 +33,5 @@ export interface Article {
   source: string
   title: string
   chunk_count: number
+  preview: string
 }
