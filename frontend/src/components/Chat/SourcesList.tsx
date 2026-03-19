@@ -9,6 +9,15 @@ interface Props {
   sources: string[]
 }
 
+/** Mirror of the backend clean_title() — "articles/crispr_gene_editing.txt" → "Crispr Gene Editing" */
+function cleanTitle(source: string): string {
+  const filename = source.split('/').pop() ?? source
+  const noExt = filename.replace(/\.[^.]+$/, '')
+  return noExt
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 export default function SourcesList({ sources }: Props) {
   if (!sources.length) return null
 
@@ -29,7 +38,7 @@ export default function SourcesList({ sources }: Props) {
                 key={src}
                 className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-gray-300 border border-white/10"
               >
-                {src}
+                {cleanTitle(src)}
               </span>
             ))}
           </DisclosurePanel>
