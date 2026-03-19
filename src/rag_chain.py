@@ -10,6 +10,31 @@ mongo_client = MongoClient(os.getenv("MONGODB_URI"))
 collection = mongo_client[os.getenv("MONGODB_DB")]["articles"]
 
 
+_title_cache: dict = {}
+
+def get_source_title(source: str) -> str:
+    """Return the human-readable title for a source key.
+
+    Reads the 'Title: ...' line from the first chunk in MongoDB and caches the
+    result so subsequent calls for the same source are free.
+    """
+    if source in _title_cache:
+        return _title_cache[source]
+    doc = collection.find_one({"source": source, "chunk_index": 0}, {"text": 1})
+    if doc:
+        first_line = doc["text"].split("\n")[0]
+        if first_line.startswith("Title: "):
+            title = first_line[len("Title: "):].strip()
+            _title_cache[source] = title
+            return title
+    # Fallback: clean the filename
+    import os as _os
+    name = _os.path.splitext(source.split("/")[-1])[0]
+    title = name.replace("_", " ").replace("-", " ").title()
+    _title_cache[source] = title
+    return title
+
+
 def get_embedding(text):
     response = openai_client.embeddings.create(
         model="text-embedding-3-small",

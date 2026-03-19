@@ -17,6 +17,7 @@ from rag_chain import (  # noqa: E402
     condense_question,
     retrieve_chunks,
     generate_follow_ups,
+    get_source_title,
 )
 
 from routes.deps import require_auth
@@ -98,7 +99,7 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
         return
 
     context = "\n\n".join(f"[{c['source']}]\n{c['text']}" for c in chunks)
-    sources = list(dict.fromkeys(c["source"] for c in chunks))
+    sources = list(dict.fromkeys(get_source_title(c["source"]) for c in chunks))
     scores = [c.get("score", 0) for c in chunks]
     confidence = round((sum(scores) / len(scores)) * 100) if scores else 0
 
