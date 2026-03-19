@@ -35,8 +35,13 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
       return
     }
     client.get(`/api/conversations/${sessionId}`).then((res) => {
-      const raw: { role: string; content: string }[] = res.data.messages ?? []
-      setMessages(raw.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })))
+      const raw: { role: string; content: string; sources?: string[]; confidence?: number | null }[] = res.data.messages ?? []
+      setMessages(raw.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        sources: m.sources,
+        confidence: m.confidence,
+      })))
     })
   }, [sessionId])
 

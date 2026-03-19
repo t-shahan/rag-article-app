@@ -135,7 +135,16 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"
         return
 
-    # Persist the full exchange to MongoDB
+    # Send done immediately — confidence + sources are ready now, no need to wait
+    yield f"data: {json.dumps({'done': True, 'sources': sources, 'confidence': confidence})}\n\n"
+
+    # Follow-ups require a second LLM call; send as a separate event so the UI
+    # can render confidence/sources without waiting for them
+    follow_ups = generate_follow_ups(body.question, full_answer)
+    yield f"data: {json.dumps({'follow_ups': follow_ups})}\n\n"
+
+    # Persist the full exchange to MongoDB — include sources/confidence on the
+    # assistant message so they're available when loading past conversations
     if body.session_id:
         conversations_col.update_one(
             {"session_id": body.session_id},
@@ -144,7 +153,8 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
                     "messages": {
                         "$each": [
                             {"role": "user", "content": body.question},
-                            {"role": "assistant", "content": full_answer},
+                            {"role": "assistant", "content": full_answer,
+                             "sources": sources, "confidence": confidence},
                         ]
                     }
                 },
@@ -152,14 +162,6 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
             },
             upsert=True,
         )
-
-    # Send done immediately — confidence + sources are ready now, no need to wait
-    yield f"data: {json.dumps({'done': True, 'sources': sources, 'confidence': confidence})}\n\n"
-
-    # Follow-ups require a second LLM call; send as a separate event so the UI
-    # can render confidence/sources without waiting for them
-    follow_ups = generate_follow_ups(body.question, full_answer)
-    yield f"data: {json.dumps({'follow_ups': follow_ups})}\n\n"
 
 
 @router.post("/chat/stream", dependencies=[Depends(require_auth)])
