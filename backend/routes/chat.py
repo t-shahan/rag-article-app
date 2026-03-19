@@ -159,6 +159,16 @@ def _stream(body: ChatRequest) -> Generator[str, None, None]:
         )
 
 
+class FollowUpsRequest(BaseModel):
+    question: str = Field(..., max_length=5000)
+    answer: str = Field(..., max_length=10000)
+
+
+@router.post("/chat/follow-ups", dependencies=[Depends(require_auth)])
+def get_follow_ups(body: FollowUpsRequest):
+    return {"follow_ups": generate_follow_ups(body.question, body.answer)}
+
+
 @router.post("/chat/stream", dependencies=[Depends(require_auth)])
 def chat_stream(body: ChatRequest):
     return StreamingResponse(

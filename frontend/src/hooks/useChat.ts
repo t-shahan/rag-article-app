@@ -36,12 +36,31 @@ export function useChat({ sessionId, onSessionCreated }: UseChatOptions) {
     }
     client.get(`/api/conversations/${sessionId}`).then((res) => {
       const raw: { role: string; content: string; sources?: string[]; confidence?: number | null }[] = res.data.messages ?? []
-      setMessages(raw.map((m) => ({
+      const mapped: ChatMessage[] = raw.map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: m.content,
         sources: m.sources,
         confidence: m.confidence,
-      })))
+      }))
+      setMessages(mapped)
+
+      // Generate fresh follow-ups for the last Q/A exchange
+      const lastAssistantIdx = mapped.reduceRight((found, m, i) => found === -1 && m.role === 'assistant' ? i : found, -1)
+      if (lastAssistantIdx > 0) {
+        const lastUserIdx = mapped.slice(0, lastAssistantIdx).reduceRight((found, m, i) => found === -1 && m.role === 'user' ? i : found, -1)
+        if (lastUserIdx !== -1) {
+          client.post('/api/chat/follow-ups', {
+            question: mapped[lastUserIdx].content,
+            answer: mapped[lastAssistantIdx].content,
+          }).then((r) => {
+            setMessages((prev) => {
+              const updated = [...prev]
+              updated[lastAssistantIdx] = { ...updated[lastAssistantIdx], follow_ups: r.data.follow_ups }
+              return updated
+            })
+          }).catch(() => { /* follow-ups are non-critical */ })
+        }
+      }
     })
   }, [sessionId])
 
